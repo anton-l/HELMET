@@ -52,9 +52,9 @@ def load_qa(dataset, path, demo_path, max_test_samples=None, popularity_threshol
     Load the data for QA tasks
     """
     if "nq_bad" in dataset:
-        user_template = "Use the given documents to write a concise and short answer to the question. Only use the information presented in the documents, and output 'unanswerable' if the question is not valid or cannot be answered with the given document. Write your answer in the following format:\nAnswer: [answer]\n\n{demos}{context}\n\nQuestion: {question}"
+        user_template = "Use the given documents to write a concise and short answer to the question. Only use the information presented in the documents, and output 'unanswerable' if the question is not valid or cannot be answered with the given document. Write your answer in the following format:\nAnswer: [answer]\n\n{demos}{context}\n\nUse the given documents to write a concise and short answer to the question. Only use the information presented in the documents, and output 'unanswerable' if the question is not valid or cannot be answered with the given document. Write your answer in the following format:\nAnswer: [answer]\n\nQuestion: {question}"
     else:
-        user_template = "Use the given documents to write a concise and short answer to the question. Write your answer in the following format:\nAnswer: [answer]\n\n{demos}{context}\n\nQuestion: {question}"
+        user_template = "Use the given documents to write a concise and short answer to the question. Write your answer in the following format:\nAnswer: [answer]\n\n{demos}{context}\n\nUse the given documents to write a concise and short answer to the question. Write your answer in the following format:\nAnswer: [answer]\n\nQuestion: {question}"
     system_template = "Answer:"
     prompt_template = user_template + "\n" + system_template
 
@@ -427,7 +427,7 @@ def load_icl(dataset, max_test_sample=None, seed=42):
     elif "nlu" in dataset.lower():
         data = load_dataset("xingkunliuxtracta/nlu_evaluation_data", trust_remote_code=True)["train"]
         data = data.train_test_split(test_size=0.1, seed=seed)
-        id2label = data.features["label"].names
+        id2label = data["train"].features["label"].names
         train_data = data["train"]
         test_data = data["test"]
         text_field = "text"
@@ -647,11 +647,11 @@ def load_infbench(dataset, shots=0, max_test_samples=None, seed=42):
     # slightly modified to be consistent with other datasets, shouldn't affect performance
     post_process = default_post_process
     if "qa_eng" in dataset:
-        user_template = "You are given a story and a question. Answer the question as concisely as you can, using a single phrase if possible.\n\n{demo}{context}\n\nQuestion: {question}"
+        user_template = "You are given a story and a question. Answer the question as concisely as you can, using a single phrase if possible.\n\n{demo}{context}\n\nAnswer the question as concisely as you can, using a single phrase if possible. Write your answer in the following format:\nAnswer: [answer]\n\nQuestion: {question}"
         system_template = "Answer:"
         data = data["longbook_qa_eng"]
     elif "choice_eng" in dataset:
-        user_template = "You are given a story and a question with multiple choices. Choose the best answer from the options provided. Only one of the following options is correct, output the answer using one single letter (A, B, C, or D). Don't say anything else.\n\n{demo}{context}\n\nQuestion: {question}\nOptions:\n{options}"
+        user_template = "You are given a story and a question with multiple choices. Choose the best answer from the options provided.\n\n{demo}{context}\n\nChoose the best answer from the options provided. Only one of the following options is correct, output the answer using one single letter (A, B, C, or D). Don't say anything else. Write your answer in the following format:\nAnswer: [letter]\n\nQuestion: {question}\nOptions:\n{options}"
         system_template = "Answer:"
         data = data["longbook_choice_eng"]
         def pp(output, example):
