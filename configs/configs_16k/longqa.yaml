@@ -1,8 +1,8 @@
-input_max_length: 8192,16384,8192,16384
-datasets: infbench_qa_eng_7982,infbench_qa_eng_16174,infbench_choice_eng_7982,infbench_choice_eng_16174
-generation_max_length: 10,10,10,10
-test_files: ',,,'
-demo_files: ',,,'
+input_max_length: 16384,16384
+datasets: infbench_qa_eng_16174,infbench_choice_eng_16174
+generation_max_length: 10,10
+test_files: ','
+demo_files: ','
 use_chat_template: true
 max_test_samples: 100
 shots: 2

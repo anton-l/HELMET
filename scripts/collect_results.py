@@ -3,9 +3,9 @@ import json
 import numpy as np
 import pandas as pd
 import yaml
+import argparse
 from dataclasses import dataclass, asdict
 from tqdm import tqdm
-from transformers.agents.python_interpreter import MAX_LEN_OUTPUT
 
 dataset_to_metrics = {
     "json_kv": "substring_exact_match",
@@ -145,215 +145,77 @@ class arguments:
         print("found scores:", s)
         return s
 
-    def get_metric_by_depth(self):
-        path = self.get_path()
-        path = path.replace(".score", '')
-        print(path)
-        if not os.path.exists(path):
-            return None
-        with open(path) as f:
-            results = json.load(f)
-
-        output = []
-        _, metric = self.get_metric_name()
-        metric = metric[0]
-        keys = ["depth", "k", metric]
-        for d in results["data"]:
-            o = {}
-            for key in keys:
-                if key == "k" and "ctxs" in d:
-                    d["k"] = len(d['ctxs'])
-                if key not in d:
-                    print("no", key)
-                    return None
-                o[key] = d[key]
-            o["metric"] = o.pop(metric)
-            output.append(o)
-
-        df = pd.DataFrame(output)
-        dfs = df.groupby(list(output[0].keys())[:-1]).mean().reset_index()
-
-        return dfs.to_dict("records")
-
 
 if __name__ == "__main__":
-    # comment out the models you don't want to include
+    # Set up argument parser
+    parser = argparse.ArgumentParser(description='Collect evaluation results for language models')
+    parser.add_argument('--output_file', type=str, required=True,
+                        help='Path to save the results CSV file')
+    parser.add_argument('--model_name', type=str, required=True,
+                        help='Name of the model being evaluated')
+    parser.add_argument('--context_length', type=int, required=True,
+                        help='Context length to evaluate (e.g., 8192, 16384, 32768)')
+    parser.add_argument('--use_chat_template', type=bool, default=False,
+                        help='Whether to use chat template for the model')
+
+
+    args = parser.parse_args()
+
+    # Set variables from arguments
+    output_file = args.output_file
+    model_name = args.model_name
+    MAX_LENGTH = args.context_length
+    use_chat_template = args.use_chat_template
+
+    print(f"Evaluating model: {model_name}")
+    print(f"Context length: {MAX_LENGTH}")
+    print(f"Use chat template: {use_chat_template}")
+    print(f"Results will be saved to: {output_file}")
+
+    # Define model configuration
     models_configs = [
-        # {"model": "Llama-3.2-1B", "training_length": 131072, "use_chat_template": False},
-        # {"model": "Llama-3.2-1B-Instruct", "training_length": 131072},
-        # {"model": "Qwen2.5-1.5B", "training_length": 131072, "use_chat_template": False},
-        # {"model": "Qwen2.5-1.5B-Instruct", "training_length": 131072},
-        # {"model": "SmolLM2-1.7B", "training_length": 8192, "use_chat_template": False},
-        # {"model": "SmolLM2-1.7B-Instruct-rope300k-reup", "training_length": 16384},
-        # {"model": "SmolLM2-Instruct-16k-SeaLong-ST5k-rope300k", "training_length": 16384},
-        # {"model": "SmolLM2-Instruct-16k-SeaLong-LongAlign-ST5k-rope300k", "training_length": 16384},
-        #
-        # {"model": "SmolLM2-16k-SmolTalk1M-AceMath500k-CodeIO-ep2-8k", "training_length": 8192, "use_chat_template": False},
-        # {"model": "SmolLM2-16k-SmolTalk1M-AceMath500k-CodeIO-ep1-8k", "training_length": 8192, "use_chat_template": False},
-        # {"model": "SmolLM2-16k-SmolTalk1M-AceMath500k-ep1-8k", "training_length": 8192, "use_chat_template": False},
-        # {"model": "SmolLM2-16k-SmolTalk1M-AceMath100k-CodeIO-ep1-rope300k", "training_length": 16384, "use_chat_template": False},
-        # {"model": "SmolLM2-16k-SmolTalk1M-AceMath100k-CodeIO-ep1-rope100k", "training_length": 16384, "use_chat_template": False},
-
-        # {"model": "SmolLM2-Instruct-16k-SeaLong-LongAlign-ST10k-v2-rope300k", "training_length": 16384, "use_chat_template": True},
-        # {"model": "SmolLM2-Instruct-16k-SeaLong-LongAlign-ST10k-v2-rope300k-1e-4-ep2", "training_length": 16384, "use_chat_template": True},
-        # {"model": "SmolLM2-Ins-16k-SeaLong-LongAlign-ST5k-v2-rope300k-1e-4", "training_length": 16384, "use_chat_template": False},
-        # {"model": "SmolLM2-Instruct-16k-SeaLong-LongAlign-ST10k-v2-rope500k-1e-4", "training_length": 16384, "use_chat_template": True},
-
-        # #   "HuggingFaceTB/SmolLM2-1.7B-Instruct-rope300k-reup"
-        # {"model": "SmolLM2-1.7B-Instruct-rope300k-reup", "training_length": 16384},
-        # #   "HuggingFaceTB/SmolLM2-Instruct-16k-SeaLong-ST5k-rope300k"
-        # {"model": "SmolLM2-Instruct-16k-SeaLong-ST5k-rope300k", "training_length": 16384},
-        # #   "HuggingFaceTB/SmolLM2-Instruct-16k-SeaLong-LongAlign-ST5k-rope300k"
-        # {"model": "SmolLM2-Instruct-16k-SeaLong-LongAlign-ST5k-rope300k", "training_length": 16384},
-        # #   "HuggingFaceTB/SmolLM2-16k-SmolTalk1M-AceMath500k-CodeIO-ep2-8k"
-        # {"model": "SmolLM2-16k-SmolTalk1M-AceMath500k-CodeIO-ep2-8k", "training_length": 8192},
-        # #   "HuggingFaceTB/SmolLM2-16k-SmolTalk1M-AceMath500k-CodeIO-ep1-8k"
-        # {"model": "SmolLM2-16k-SmolTalk1M-AceMath500k-CodeIO-ep1-8k", "training_length": 8192},
-        # #   "HuggingFaceTB/SmolLM2-16k-SmolTalk1M-AceMath500k-ep1-8k"
-        # {"model": "SmolLM2-16k-SmolTalk1M-AceMath500k-ep1-8k", "training_length": 8192},
-        # #   "HuggingFaceTB/SmolLM2-16k-SmolTalk1M-AceMath100k-CodeIO-ep1-rope300k"
-        # {"model": "SmolLM2-16k-SmolTalk1M-AceMath100k-CodeIO-ep1-rope300k", "training_length": 16384},
-        # #   "HuggingFaceTB/SmolLM2-16k-SmolTalk1M-AceMath100k-CodeIO-ep1-rope100k"
-        # {"model": "SmolLM2-16k-SmolTalk1M-AceMath100k-CodeIO-ep1-rope100k", "training_length": 16384},
-        # #   "HuggingFaceTB/SmolLM2-Instruct-16k-SeaLong-LongAlign-ST10k-v2-rope300k"
-        # {"model": "SmolLM2-Instruct-16k-SeaLong-LongAlign-ST10k-v2-rope300k", "training_length": 16384},
-        # #   "HuggingFaceTB/SmolLM2-Instruct-16k-SeaLong-LongAlign-ST10k-v2-rope300k-1e-4-ep2"
-        # {"model": "SmolLM2-Instruct-16k-SeaLong-LongAlign-ST10k-v2-rope300k-1e-4-ep2", "training_length": 16384},
-        # #   "HuggingFaceTB/SmolLM2-Ins-16k-SeaLong-LongAlign-ST5k-v2-rope300k-1e-4"
-        # {"model": "SmolLM2-Ins-16k-SeaLong-LongAlign-ST5k-v2-rope300k-1e-4", "training_length": 16384},
-        # #   "HuggingFaceTB/SmolLM2-Instruct-16k-SeaLong-LongAlign-ST10k-v2-rope500k-1e-4"
-        # {"model": "SmolLM2-Instruct-16k-SeaLong-LongAlign-ST10k-v2-rope500k-1e-4", "training_length": 16384},
-
-        # #  "HuggingFaceTB/SmolLM2-Instruct-16k-SeaLong-LongAlign-ST10k-v2-rope500k-5e-5-ep2"
-        # {"model": "SmolLM2-Instruct-16k-SeaLong-LongAlign-ST10k-v2-rope500k-5e-5-ep2", "training_length": 16384},
-        # #  "HuggingFaceTB/SmolLM2-Instruct-16k-SeaLong-LongAlign-ST10k-v2-rope300k-1e4-2"
-        # {"model": "SmolLM2-Instruct-16k-SeaLong-LongAlign-ST10k-v2-rope300k-1e4-2", "training_length": 16384},
-        # #  "HuggingFaceTB/SmolLM2-Instruct-16k-SeaLong-LongAlign-ST10k-v2-rope300k-5e-5"
-        # {"model": "SmolLM2-Instruct-16k-SeaLong-LongAlign-ST10k-v2-rope300k-5e-5", "training_length": 16384},
-        # #  "/fsx/loubna/data/SmolLM2-1.7B-Instruct-rope500k"
-        # {"model": "SmolLM2-1.7B-Instruct-rope500k", "training_length": 16384},
-
-        # /fsx/loubna/data/SmolLM2-1.7B-Instruct-rope600k-32k
-        {"model": "SmolLM2-1.7B-Instruct-rope600k-32k", "training_length": 32768},
-        # /fsx/loubna/data/SmolLM2-1.7B-Instruct-rope500k-32k
-        {"model": "SmolLM2-1.7B-Instruct-rope500k-32k", "training_length": 32768},
-        # /fsx/loubna/data/SmolLM2-1.7B-Instruct-rope700k-32k
-        {"model": "SmolLM2-1.7B-Instruct-rope700k-32k", "training_length": 32768},
-        # /fsx/loubna/data/SmolLM2-1.7B-Instruct-rope800k-32k
-        {"model": "SmolLM2-1.7B-Instruct-rope800k-32k", "training_length": 32768},
-
-        # {"model": "SmolLM2-1.7B-final", "training_length": 2048, "use_chat_template": False},
-        # {"model": "SmolLM2-1.7B-Intermediate-SFT-v2", "training_length": 2048},
-        # {"model": "granite-3.0-1b-a400m-base", "training_length": 4096, "use_chat_template": False},
-        # {"model": "granite-3.0-1b-a400m-instruct", "training_length": 4096},
-        # {"model": "smollmv2-1.7B-32k-final", "training_length": 32768, "use_chat_template": False},
-        # {"model": "smollmv2-1.7B-16k-final", "training_length": 16384, "use_chat_template": False},
-        # {"model": "smollmv2-lc-base-16k-lr1e-5", "training_length": 16384, "use_chat_template": False},
-        # {"model": "smollmv2-lc-base-16k-lr2e-5", "training_length": 16384, "use_chat_template": False},
-        # {"model": "smollmv2-lc-base-8k-lr2e-5-800steps", "training_length": 8192, "use_chat_template": False},
-        # {"model": "smollmv2-lc-base-8k-lr2e-5", "training_length": 8192, "use_chat_template": False},
-        # {"model": "smollmv2-lc-co1-base-8k-16k-lr1e-5-400steps", "training_length": 16384, "use_chat_template": False},
-        # {"model": "smollmv2-lc-co1-base-16k-32k-lr1e-5-400steps", "training_length": 32768, "use_chat_template": False},
-        # {"model": "smollmv2-lc-co1-base-8k-32k-lr1e-5-400steps", "training_length": 32768, "use_chat_template": False},
-        # {"model": "smollmv2-lc-m2-base-16k-lr1e-5-200steps", "training_length": 16384, "use_chat_template": False},
-        # {"model": "smollmv2-lc-m2-base-16k-lr1e-5-400steps", "training_length": 16384, "use_chat_template": False},
-        # {"model": "smollmv2-lc-m2-base-16k-lr1e-5-800steps", "training_length": 16384, "use_chat_template": False},
-        # {"model": "smollmv2-lc-m2-base-8k-lr1e-5-800step", "training_length": 8192, "use_chat_template": False},
-        # {"model": "smollmv2-lc-m2-base-8k-lr1e-5-400steps", "training_length": 8192, "use_chat_template": False},
-        # {"model": "smollmv2-lc-m2-base-8k-lr1e-5-200steps", "training_length": 8192, "use_chat_template": False},
-        #
-        # {"model": "smollmv2-temp-1.7B-16k", "training_length": 16384, "use_chat_template": False},
-        # {"model": "smollm2-lc-merge-no-base", "training_length": 16384, "use_chat_template": False},
-        # {"model": "smollmv2-lc-m4-base-16k-lr1e-5-800steps", "training_length": 16384, "use_chat_template": False},
-        #
-        # {"model": "decay-75B_8k_lc", "training_length": 8192, "use_chat_template": False},
-        # {"model": "decay-200B_8k_lc-5100000", "training_length": 8192, "use_chat_template": False},
-        # {"model": "decay-200B_8k_lc-5112000", "training_length": 8192, "use_chat_template": False},
-        # {"model": "decay-200B_8k_lc-5120000", "training_length": 8192, "use_chat_template": False},
-
-        # {"model": "lc-50B-8k-to-16k-5221000", "training_length": 16384, "use_chat_template": False},
-        # {"model": "lc-50B-8k-to-16k-5225000", "training_length": 16384, "use_chat_template": False},
-        # {"model": "lc-50B-8k-to-16k-5229000", "training_length": 16384, "use_chat_template": False},
-        # {"model": "lc-50B-8k-to-16k-5233000", "training_length": 16384, "use_chat_template": False},
-
-        # "HuggingFaceTB/fix-rope-50B-8k-5216000" # 39
-        #   "HuggingFaceTB/fix-rope-50B-8k-5218000" # 40
-        #   "HuggingFaceTB/fix-rope-50B-8k-5220000" # 41
-        # {"model": "fix-rope-50B-8k-5216000", "training_length": 8192, "use_chat_template": False},
-        # {"model": "fix-rope-50B-8k-5218000", "training_length": 8192, "use_chat_template": False},
-        # {"model": "fix-rope-50B-8k-5220000", "training_length": 8192, "use_chat_template": False},
-        #
-        # # {"model": "ft-16k-1e5", "training_length": 16384, "use_chat_template": False},
-        # {"model": "50B-16k-320k-rope", "training_length": 16384, "use_chat_template": False},
-        # {"model": "big-50B-8k-130k-rope", "training_length": 8192, "use_chat_template": False},
-        #
-        # {"model": "135M-lc-6B", "training_length": 8192, "use_chat_template": False},
-        # {"model": "360M-50B-8k-2592k", "training_length": 8192, "use_chat_template": False},
-        # {"model": "50B-decay-last-try", "training_length": 8192, "use_chat_template": False},
-        # {"model": "360M-lc-100k-rope-12B", "training_length": 8192, "use_chat_template": False},
-        # {"model": "135M-lc-12B", "training_length": 8192, "use_chat_template": False},
-        # {"model": "135M-lc-100k-rope-12B", "training_length": 8192, "use_chat_template": False},
-        #
-        # {"model": "**SFT**", "training_length": 99999},
-        #
-        # {"model": "smollm2-1.7B-16k-m4-magpieu-ifeval", "training_length": 16384},
-        # {"model": "smollm2-1.7B-16k-m4-magpieu-ifeval-longalign", "training_length": 16384},
-        # {"model": "smollm2-1.7B-16k-m4-mix5-ep1", "training_length": 16384},
-        # {"model": "smollm2-1.7B-16k-m4-mix5-longalign-ep1", "training_length": 16384},
-        #
-        # {"model": "smollm2-1.7B-decay-75B-8k-magpieu-ifeval-longalign", "training_length": 8192},
-        # {"model": "smollm2-1.7B-decay-75B-8k-mix5-longalign-ep1", "training_length": 8192},
-        #
-        # # "HuggingFaceTB/smollm2-8k-dpo-mix5-longalign-ultraf-ep1" # 36
-        # #   "HuggingFaceTB/smollm2-8k-dpo-mix5-longalign-ultraf-ep2" # 37
-        # #   "HuggingFaceTB/smollm2-18k-dpo-magpieu-ifeval-longalign-ultraf-ep3" # 38
-        # {"model": "smollm2-18k-dpo-magpieu-ifeval-longalign-ultraf-ep3", "training_length": 8192},
-        # {"model": "smollm2-8k-dpo-mix5-longalign-ultraf-ep1", "training_length": 8192},
-        # {"model": "smollm2-8k-dpo-mix5-longalign-ultraf-ep2", "training_length": 8192},
-        # {"model": "smollm2-1.7B-decay-75B-8k-mix5-longalign-rewritev2", "training_length": 8192},
-        #
-        # {"model": "smollm2-1.7B-8k-mix7-half-ep2-v2-dpo-ultraf-ep3", "training_length": 8192},
-        #
-        # {"model": "smollm2-1.7B-8k-mix7-ep2-v2-dpo-ultraf-ep3", "training_length": 8192},
+        {"model": model_name, "training_length": MAX_LENGTH, "use_chat_template": use_chat_template}
     ]
-    #MAX_LENGTH = 8192
-    #MAX_LENGTH = 16384
-    MAX_LENGTH = 32768
 
-    # set your configs here
-    # configs = ["configs/recall_short.yaml", "configs/rag_short.yaml", "configs/rerank_short.yaml",
-    #            "configs/cite_short.yaml", "configs/longqa_short.yaml", "configs/summ_short.yaml",
-    #            "configs/icl_short.yaml"]
-    configs = ["recall.yaml", "icl.yaml", "longqa.yaml", "rag.yaml", "rerank.yaml"]
     if MAX_LENGTH == 8192:
-        configs = [f"configs/smollm_8k/{c}" for c in configs]
+        config_dir = "configs/configs_8k"
     elif MAX_LENGTH == 16384:
-        configs = [f"configs/smollm_16k/{c}" for c in configs]
+        config_dir = "configs/configs_16k"
     elif MAX_LENGTH == 32768:
-        configs = [f"configs/smollm_32k/{c}" for c in configs]
+        config_dir = "configs/configs_32k"
     else:
         raise ValueError(f"No configs for max length {MAX_LENGTH}")
+
+    configs = ["recall.yaml", "icl.yaml", "longqa.yaml", "rag.yaml", "rerank.yaml"]
+    configs = [f"{config_dir}/{c}" for c in configs]
+
     datasets_configs = []
     for config in configs:
-        c = yaml.safe_load(open(config))
-        print(c)
-        if isinstance(c["generation_max_length"], int):
-            c["generation_max_length"] = ",".join([str(c["generation_max_length"])] * len(c["datasets"].split(",")))
-        if isinstance(c["input_max_length"], int):
-            c["input_max_length"] = ",".join([str(c["input_max_length"])] * len(c["datasets"].split(",")))
-        for d, t, l, g in zip(c['datasets'].split(','), c['test_files'].split(','), c['input_max_length'].split(','),
-                              c['generation_max_length'].split(',')):
-            datasets_configs.append(
-                {"dataset": d, "test_name": os.path.basename(os.path.splitext(t)[0]), "input_max_length": int(l),
-                 "generation_max_length": int(g), "use_chat_template": c["use_chat_template"],
-                 "max_test_samples": c["max_test_samples"], 'shots': c['shots']})
+        try:
+            c = yaml.safe_load(open(config))
+            print(f"Loaded config {config}")
+
+            if isinstance(c["generation_max_length"], int):
+                c["generation_max_length"] = ",".join([str(c["generation_max_length"])] * len(c["datasets"].split(",")))
+            if isinstance(c["input_max_length"], int):
+                c["input_max_length"] = ",".join([str(c["input_max_length"])] * len(c["datasets"].split(",")))
+
+            for d, t, l, g in zip(c['datasets'].split(','), c['test_files'].split(','),
+                                  c['input_max_length'].split(','), c['generation_max_length'].split(',')):
+                datasets_configs.append(
+                    {"dataset": d, "test_name": os.path.basename(os.path.splitext(t)[0]),
+                     "input_max_length": int(l), "generation_max_length": int(g),
+                     "use_chat_template": c["use_chat_template"],
+                     "max_test_samples": c["max_test_samples"], 'shots': c['shots']})
+        except Exception as e:
+            print(f"Error loading config {config}: {e}")
 
     df = []
     for model in tqdm(models_configs):
-        if model["training_length"] < MAX_LENGTH:
-            continue
+        if model["use_chat_template"]:
+            del model["use_chat_template"]
         args = arguments()
-        args.tag = "v1"  # SET YOUR TAG HERE
+        args.tag = "v1"
         args.output_dir = f"output/{model['model']}"
 
         for dataset in datasets_configs:
@@ -374,42 +236,59 @@ if __name__ == "__main__":
                            })
 
     all_df = pd.DataFrame(df)
-    print(all_df)
-    lf_df = all_df.pivot_table(index=["model", "input_max_length", ], columns="dataset_simple", values="metric",
-                               sort=False)
-    lf_df = lf_df.reset_index()
-    lf_df = lf_df[lf_df['input_max_length'] == MAX_LENGTH]
+    print(f"Collected {len(all_df)} results")
 
+    lf_df = all_df.pivot_table(index=["model"], columns="dataset_simple", values="metric", sort=False)
+    lf_df = lf_df.reset_index()
+
+    # Calculate aggregate metrics
     custom_avgs = {
         "Recall": ["json_kv substring_exact_match", "ruler_niah_mk_2 ruler_recall", "ruler_niah_mk_3 ruler_recall",
                    "ruler_niah_mv ruler_recall"],
         "ICL": ['trec_coarse exact_match', 'trec_fine exact_match', 'banking77 exact_match', 'clinic150 exact_match',
                 'nlu exact_match'],
-        # "Cite": ['alce_asqa str_em', 'alce_asqa citation_rec', 'alce_asqa citation_prec', 'alce_qampari qampari_rec_top5', 'alce_qampari citation_rec', 'alce_qampari citation_prec', ],
         "LongQA": ['infbench_qa rougeL_f1', 'infbench_choice exact_match', ],
         "RAG": ['nq substring_exact_match', 'hotpotqa substring_exact_match', 'popqa substring_exact_match',
                 'triviaqa substring_exact_match', ],
         "Re-rank": ['msmarco_rerank_psg NDCG@10', ],
-        # "Summ": ['infbench_sum gpt4-f1', 'multi_lexsum gpt4-f1', ],
         "Average-Real": ['RAG', 'ICL', 'Re-rank', 'LongQA'],
         "Average-All": ['Recall', 'RAG', 'ICL', 'Re-rank', 'LongQA'],
     }
-    lf_df['Recall'] = np.mean(lf_df[custom_avgs['Recall']], axis=1)
-    lf_df['RAG'] = np.mean(lf_df[custom_avgs['RAG']], axis=1)
-    lf_df['Re-rank'] = np.mean(lf_df[custom_avgs['Re-rank']], axis=1)
-    lf_df['LongQA'] = np.mean(lf_df[custom_avgs['LongQA']], axis=1)
-    lf_df['ICL'] = np.mean(lf_df[custom_avgs['ICL']], axis=1)
-    # # lf_df['Cite'] = np.mean(lf_df[custom_avgs['Cite']], axis=1)
-    # # lf_df['Summ'] = np.mean(lf_df[custom_avgs['Summ']], axis=1)
-    lf_df['Average-Real'] = np.mean(lf_df[custom_avgs['Average-Real']], axis=1)
-    lf_df['Average-All'] = np.mean(lf_df[custom_avgs['Average-All']], axis=1)
 
-    cols = ["model", "input_max_length", "Average-Real", "Average-All", "Recall", "ICL", "LongQA", "RAG", "Re-rank"]
+    for category, columns in custom_avgs.items():
+        if category in ["Average-Real", "Average-All"]:
+            available_columns = [col for col in columns if any(c in lf_df.columns for c in custom_avgs.get(col, []))]
+            if available_columns:
+                available_values = []
+                for col in available_columns:
+                    col_columns = [c for c in custom_avgs.get(col, []) if c in lf_df.columns]
+                    if col_columns:
+                        lf_df[col] = np.mean(lf_df[col_columns], axis=1)
+                        available_values.append(col)
+                if available_values:
+                    lf_df[category] = np.mean(lf_df[available_values], axis=1)
+        else:
+            available_columns = [c for c in columns if c in lf_df.columns]
+            if available_columns:
+                lf_df[category] = np.mean(lf_df[available_columns], axis=1)
+
+    cols = ["model", "Average-Real", "Average-All", "Recall", "ICL", "LongQA", "RAG", "Re-rank"]
+    final_cols = []
+    for c in cols:
+        if c in lf_df.columns:
+            final_cols.append(c)
     for c in lf_df.columns:
-        if c not in cols:
-            cols.append(c)
-    lf_df = lf_df[cols]
+        if c not in final_cols:
+            final_cols.append(c)
 
-    print(lf_df.to_csv(index=False))
-    # import pdb; pdb.set_trace()
+    lf_df = lf_df[final_cols]
 
+    print(f"Results for {model_name} with context length {MAX_LENGTH}:")
+
+    lf_df.to_csv(output_file, index=False)
+    print(f"Results written to {output_file}")
+
+    print("\nSummary of results:")
+    for col in ['Average-Real', 'Average-All', 'Recall', 'ICL', 'LongQA', 'RAG', 'Re-rank']:
+        if col in lf_df.columns:
+            print(f"{col}: {lf_df[col].values[0]:.2f}")
